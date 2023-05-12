@@ -27,6 +27,7 @@
 /* PERIPHERAL USING LIST */
 #define BSP_USING_ADC0
 // #define BSP_USING_DAC0
+#define BSP_USING_WDT
 #define BSP_USING_UART0
 #define BSP_USING_UART1
 #define BSP_USING_SPI0
@@ -81,6 +82,16 @@
         .clk = DAC_CLK_500KHZ,       \
         .pin.dac0 = GLB_GPIO_PIN_11, \
         .pin.pin_num = 1,            \
+    }
+#endif
+#endif
+
+#if defined(BSP_USING_WDT)
+#ifndef WDT_CONFIG
+#define WDT_CONFIG           \
+    {                        \
+        .id = 0,             \
+        .wdt_timeout = 1*32000, \
     }
 #endif
 #endif
