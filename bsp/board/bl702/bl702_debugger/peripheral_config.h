@@ -86,7 +86,7 @@
 #define UART0_CONFIG                 \
     {                                \
         .id = 0,                     \
-        .baudrate = 2000000,         \
+        .baudrate = 115200,          \
         .databits = UART_DATA_LEN_8, \
         .stopbits = UART_STOP_ONE,   \
         .parity = UART_PAR_NONE,     \
