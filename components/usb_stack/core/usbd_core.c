@@ -357,8 +357,9 @@ static bool usbd_set_configuration(uint8_t config_index, uint8_t alt_setting)
     bool found = false;
 
     if (config_index == 0U) {
-        /* TODO: unconfigure device */
-        USBD_LOG_ERR("Device not configured - invalid configuration\r\n");
+        /* Endpoint close is not implemented by this BL702 DC, but the core
+         * must still leave Configured state as required by USB chapter 9. */
+        usbd_core_cfg.configured = false;
         return true;
     }
 
@@ -1176,6 +1177,16 @@ void usbd_event_notify_handler(uint8_t event, void *arg)
 {
     switch (event) {
         case USB_EVENT_RESET:
+            /* A bus reset aborts the current control transfer and returns the
+             * device to Default state.  Do not carry a partial descriptor,
+             * ZLP or old configuration into the next enumeration. */
+            usbd_core_cfg.ep0_data_buf = usbd_core_cfg.req_data;
+            usbd_core_cfg.ep0_data_buf_residue = 0;
+            usbd_core_cfg.ep0_data_buf_len = 0;
+            usbd_core_cfg.zlp_flag = false;
+            usbd_core_cfg.configured = false;
+            usbd_core_cfg.configuration = 0;
+            usbd_core_cfg.remote_wakeup = 0;
             usbd_set_address(0);
 #if USBD_EP_CALLBACK_SEARCH_METHOD == 1
             usbd_ep_callback_register();

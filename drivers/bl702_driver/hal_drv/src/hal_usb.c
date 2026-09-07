@@ -653,6 +653,17 @@ int usb_dc_ep_clear_stall(const uint8_t ep)
     }
     switch (ep_idx) {
         case 0:
+            /*
+             * A new SETUP packet terminates the previous control transfer
+             * and clears an EP0 halt.  The generic clear-stall helper used
+             * to be a no-op for EP0, leaving one rejected request able to
+             * poison every later descriptor/vendor request until a power
+             * cycle.  Clear the hardware bit explicitly; EP0 is armed by
+             * the SETUP/RESET_END ISR after the request has been handled.
+             */
+            tmpVal = BL_RD_REG(USB_BASE, USB_CONFIG);
+            tmpVal = BL_CLR_REG_BIT(tmpVal, USB_CR_USB_EP0_SW_STALL);
+            BL_WR_REG(USB_BASE, USB_CONFIG, tmpVal);
             break;
         case 1:
             tmpVal = BL_RD_REG(USB_BASE, USB_EP1_CONFIG);
@@ -1034,6 +1045,31 @@ void usb_dc_isr(usb_dc_device_t *device)
 {
     USB_EP_ID epnum = EP_ID0;
 
+    /*
+     * Bus reset cancels every outstanding transfer.  Handle it before any
+     * endpoint completion that may still be latched from the old USB state.
+     * In particular, processing an old EP0 OUT/IN completion after reset can
+     * corrupt the first descriptor request of the new enumeration.
+     */
+    if (USB_Get_IntStatus(USB_INT_RESET)) {
+        USB_Clr_IntStatus(USB_INT_RESET);
+        for (epnum = EP_ID0; epnum <= EP_ID7; epnum++) {
+            USB_Clr_EPx_IntStatus(epnum);
+        }
+        device->parent.callback(&device->parent, NULL, 0, USB_DC_EVENT_RESET);
+        return;
+    }
+
+    /* RESET_END arms a clean EP0 before normal endpoint events resume. */
+    if (USB_Get_IntStatus(USB_INT_RESET_END)) {
+        USB_Clr_IntStatus(USB_INT_RESET_END);
+        USB_Clr_EPx_IntStatus(EP_ID0);
+        usb_dc_ep_clear_stall(USB_CONTROL_IN_EP0);
+        usb_dc_ep_clear_stall(USB_CONTROL_OUT_EP0);
+        USB_Set_EPx_Rdy(EP_ID0);
+        return;
+    }
+
     /* EP1_DONE -> EP2_DONE -> ...... -> EP7_DONE*/
     for (USB_INT_Type epint = USB_INT_EP1_DONE; epint <= USB_INT_EP7_DONE; epint += 2) {
         if (USB_Get_IntStatus(epint)) {
@@ -1062,13 +1098,22 @@ void usb_dc_isr(usb_dc_device_t *device)
 
     /* EP0 setup done */
     if (USB_Get_IntStatus(USB_INT_EP0_SETUP_DONE)) {
-        if (!USB_Is_EPx_RDY_Free(0)) {
-            USB_DC_LOG_DBG("ep0 setup busy\r\n");
-            return;
-        }
-        USB_Clr_IntStatus(USB_INT_EP0_SETUP_DONE);
+        /*
+         * SETUP is a control-transfer barrier: it aborts the preceding
+         * transfer, clears EP0 halt and makes any old IN/OUT-DONE event
+         * irrelevant.  Do not reject SETUP based on the previous RDY bit --
+         * a direct xHCI host can issue the next request before firmware has
+         * consumed the previous status-stage interrupt.
+         */
+        USB_Clr_EPx_IntStatus(EP_ID0);
+        usb_dc_ep_clear_stall(USB_CONTROL_IN_EP0);
+        usb_dc_ep_clear_stall(USB_CONTROL_OUT_EP0);
         device->parent.callback(&device->parent, NULL, 0, USB_DC_EVENT_SETUP_NOTIFY);
-        USB_Set_EPx_Rdy(EP_ID0);
+
+        /* Keep a deliberate protocol STALL until the next SETUP. */
+        if (USB_Get_EPx_Status(EP_ID0) != USB_EP_STATUS_STALL) {
+            USB_Set_EPx_Rdy(EP_ID0);
+        }
         return;
     }
 
@@ -1100,20 +1145,6 @@ void usb_dc_isr(usb_dc_device_t *device)
     if (USB_Get_IntStatus(USB_INT_SOF)) {
         USB_Clr_IntStatus(USB_INT_SOF);
         device->parent.callback(&device->parent, NULL, 0, USB_DC_EVENT_SOF);
-        return;
-    }
-
-    /* reset */
-    if (USB_Get_IntStatus(USB_INT_RESET)) {
-        USB_Clr_IntStatus(USB_INT_RESET);
-        device->parent.callback(&device->parent, NULL, 0, USB_DC_EVENT_RESET);
-        return;
-    }
-
-    /* reset end */
-    if (USB_Get_IntStatus(USB_INT_RESET_END)) {
-        USB_Clr_IntStatus(USB_INT_RESET_END);
-        USB_Set_EPx_Rdy(EP_ID0);
         return;
     }
 
