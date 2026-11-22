@@ -1,7 +1,7 @@
 #ifndef _PINMUX_CONFIG_H
 #define _PINMUX_CONFIG_H
 
-/* Tang 4K production board:
+/* Tang Nano 4K production board:
  *   JTAG TDI/TDO/TMS/TCK -> GPIO0/1/2/15
  *   UART1 TX/RX          -> GPIO26/27
  *   active-low LED       -> GPIO17
