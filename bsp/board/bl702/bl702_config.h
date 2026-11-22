@@ -48,10 +48,14 @@
 #include "bl702_iot/peripheral_config.h"
 #include "bl702_iot/clock_config.h"
 #include "bl702_iot/pinmux_config.h"
-#elif defined(bl702_debugger_4k)
+#elif defined(bl702_debugger_tangnano4k)
 #include "bl702_debugger/peripheral_config.h"
 #include "bl702_debugger/clock_config.h"
-#include "bl702_debugger_4k/pinmux_config.h"
+#include "bl702_debugger_tangnano4k/pinmux_config.h"
+#elif defined(bl702_debugger_tangnano9k_rev3672)
+#include "bl702_debugger/peripheral_config.h"
+#include "bl702_debugger/clock_config.h"
+#include "bl702_debugger_tangnano4k/pinmux_config.h"
 #elif defined(bl702_debugger)
 #include "bl702_debugger/peripheral_config.h"
 #include "bl702_debugger/clock_config.h"
